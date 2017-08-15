@@ -16,7 +16,7 @@ namespace WebsiteVisitsFunctionApp
         [FunctionName("UploadRecords")]
         public static async Task<HttpResponseMessage> Run([HttpTrigger(AuthorizationLevel.Function, "post", Route = "upload-records")]HttpRequestMessage req, TraceWriter log)
         {
-            log.Info("C# HTTP trigger function processed a request.");
+            log.Info("Starting UploadRecords function");
 
             // Get request body
             var data = await req.Content.ReadAsAsync<List<WebsiteVisitRecord>>();
@@ -35,6 +35,8 @@ namespace WebsiteVisitsFunctionApp
 
         private static async Task<(bool success, string message)> ProcessRecords(IEnumerable<WebsiteVisitRecord> records, TraceWriter log)
         {
+            log.Info($"Preparing to process {records.Count()} records");
+
             string connString = Environment.GetEnvironmentVariable("MongoDB:ConnectionString");
 
             if (string.IsNullOrEmpty(connString))
@@ -57,19 +59,31 @@ namespace WebsiteVisitsFunctionApp
 
                 var collection = db.GetCollection<WebsiteVisitRecord>(collectionName);
 
+                int insertedCount = 0;
+                int skippedCount = 0;
+
                 foreach (var record in records)
                 {
-                    // Search if a record already exists for the same website/date: if such a record exists then we update the visits count, otherwise we add a new record
-
+                    // Search if a record already exists for the same website/date: if such a record exists then we skip it, otherwise we add a new record
                     var fdb = Builders<WebsiteVisitRecord>.Filter;
                     var filter = fdb.Eq("website", record.Website) & fdb.Eq("date", record.Date);
 
-                    var update = Builders<WebsiteVisitRecord>.Update.Set("visitsCount", record.VisitsCount);
+                    var existing = await collection.FindAsync(filter);
 
-                    await collection.FindOneAndUpdateAsync(filter, update, new FindOneAndUpdateOptions<WebsiteVisitRecord, WebsiteVisitRecord>() { IsUpsert = true });
+                    if (existing != null)
+                    {
+                        log.Info($"Skipping record {record.Website}-{record.Date.ToShortDateString()}: already in database");
+                        skippedCount++;
+                    }
+                    else
+                    {
+                        log.Info($"Inserting new record {record.Website}-{record.Date.ToShortDateString()}");
+                        await collection.InsertOneAsync(record);
+                        insertedCount++;
+                    }
                 }
 
-                return (true, $"Successfully added/updated {records.Count()} in database");
+                return (true, $"Successfully added {insertedCount} new records in database. {skippedCount} existing records were skipped");
             }
             catch (Exception ex)
             {
