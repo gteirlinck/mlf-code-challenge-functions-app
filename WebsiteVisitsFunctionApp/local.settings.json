@@ -1,11 +1,15 @@
 {
   "IsEncrypted": false,
   "Values": {
-    "AzureWebJobsStorage": "",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "AzureWebJobsDashboard": "",
-    "MongoDB:ConnectionString": "<Replace with conn string from Azure portal>",
-    "MongoDB:DBName": "mlfitw",
-    "MongoDB:WebsiteVisitsRecordsCollection": "websiteVisits",
-    "MongoDB:ExclusionsCollection": "exclusions"
+    "Exclusions:BackendAddress": "<DO_NOT_COMMIT>",
+    "MongoDB:Host": "<DO_NOT_COMMIT>",
+    "MongoDB:Port": "<DO_NOT_COMMIT>",
+    "MongoDB:User": "<DO_NOT_COMMIT>",
+    "MongoDB:Password": "<DO_NOT_COMMIT>",
+    "MongoDB:DBName": "<DO_NOT_COMMIT>",
+    "MongoDB:WebsiteVisitsRecordsCollection": "<DO_NOT_COMMIT>",
+    "MongoDB:ExclusionsCollection": "<DO_NOT_COMMIT>"
   }
 }

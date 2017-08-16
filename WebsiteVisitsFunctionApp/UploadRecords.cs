@@ -8,6 +8,7 @@ using Microsoft.Azure.WebJobs.Host;
 using System.Collections.Generic;
 using System;
 using MongoDB.Driver;
+using System.Threading;
 
 namespace WebsiteVisitsFunctionApp
 {
@@ -35,29 +36,15 @@ namespace WebsiteVisitsFunctionApp
 
         private static async Task<(bool success, string message)> ProcessRecords(IEnumerable<WebsiteVisitRecord> records, TraceWriter log)
         {
-            log.Info($"Preparing to process {records.Count()} records");
-
-            string connString = Environment.GetEnvironmentVariable("MongoDB:ConnectionString");
-
-            if (string.IsNullOrEmpty(connString))
-                return (false, "Failed to get MongoDB connection string from configuration");
-
-            string dbName = Environment.GetEnvironmentVariable("MongoDB:DBName");
-
-            if (string.IsNullOrEmpty(dbName))
-                return (false, "Failed to get MongoDB DB name from configuration");
-
-            string collectionName = Environment.GetEnvironmentVariable("MongoDB:WebsiteVisitsRecordsCollection");
-
-            if (string.IsNullOrEmpty(collectionName))
-                return (false, "Failed to get collection name from configuration");
+            // The function should not take more than 4 minutes to process (by default Azure functions time out after 5 minutes)
+            CancellationTokenSource cts = new CancellationTokenSource();
+            cts.CancelAfter(TimeSpan.FromMinutes(4));
 
             try
             {
-                MongoClient mongoClient = new MongoClient(connString);
-                var db = mongoClient.GetDatabase(dbName);
+                log.Info($"Preparing to process {records.Count()} records");
 
-                var collection = db.GetCollection<WebsiteVisitRecord>(collectionName);
+                var collection = MongoDBHelper.GetWebsiteVisitsRecordsCollection();
 
                 int insertedCount = 0;
                 int skippedCount = 0;
@@ -68,7 +55,7 @@ namespace WebsiteVisitsFunctionApp
                     var fdb = Builders<WebsiteVisitRecord>.Filter;
                     var filter = fdb.Eq("website", record.Website) & fdb.Eq("date", record.Date);
 
-                    var existing = await collection.FindAsync(filter);
+                    var existing = await collection.FindAsync(filter, cancellationToken: cts.Token);
 
                     if (existing != null)
                     {
@@ -78,12 +65,24 @@ namespace WebsiteVisitsFunctionApp
                     else
                     {
                         log.Info($"Inserting new record {record.Website}-{record.Date.ToShortDateString()}");
-                        await collection.InsertOneAsync(record);
+                        await collection.InsertOneAsync(record, cancellationToken: cts.Token);
                         insertedCount++;
                     }
                 }
 
                 return (true, $"Successfully added {insertedCount} new records in database. {skippedCount} existing records were skipped");
+            }
+            catch (OperationCanceledException)
+            {
+                string err = "Not inserting records in DB: operation cancelled";
+                log.Error(err);
+                return (false, err);
+            }
+            catch (ArgumentException ex)
+            {
+                string err = $"Not inserting records in DB: parameter {ex.ParamName} is missing from config";
+                log.Error(err, ex);
+                return (false, err);
             }
             catch (Exception ex)
             {
