@@ -55,7 +55,7 @@ namespace WebsiteVisitsFunctionApp
                     var fdb = Builders<WebsiteVisitRecord>.Filter;
                     var filter = fdb.Eq("website", record.Website) & fdb.Eq("date", record.Date);
 
-                    var existing = await collection.FindAsync(filter, cancellationToken: cts.Token);
+                    var existing = await collection.Find(filter).SingleOrDefaultAsync(cancellationToken: cts.Token);
 
                     if (existing != null)
                     {
